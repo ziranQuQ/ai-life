@@ -7,8 +7,8 @@ const ROOT_DIR = __dirname;
 
 loadEnvFile();
 
-const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || process.env.DEEPSEEKAPIKEY;
-const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || process.env.DEEPSEEKMODEL || "deepseek-v4-flash";
+const DEEPSEEK_API_KEY = cleanEnvValue(process.env.DEEPSEEK_API_KEY || process.env.DEEPSEEKAPIKEY);
+const DEEPSEEK_MODEL = normalizeDeepSeekModel(process.env.DEEPSEEK_MODEL || process.env.DEEPSEEKMODEL);
 const DEFAULT_STORY = "高考结束了，你站在人生的第一个重要路口。未来会怎样，还没有答案。";
 const GENERIC_CHOICES = new Set([
   "继续努力",
@@ -32,6 +32,26 @@ function sendJson(response, statusCode, data) {
     "Cache-Control": "no-store"
   });
   response.end(JSON.stringify(data));
+}
+
+function cleanEnvValue(value) {
+  return String(value || "")
+    .replace(/^["']|["']$/g, "")
+    .trim();
+}
+
+function normalizeDeepSeekModel(value) {
+  const model = cleanEnvValue(value).toLowerCase();
+
+  if (model.includes("pro")) {
+    return "deepseek-v4-pro";
+  }
+
+  if (model.includes("flash")) {
+    return "deepseek-v4-flash";
+  }
+
+  return "deepseek-v4-flash";
 }
 
 function loadEnvFile() {
