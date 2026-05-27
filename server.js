@@ -7,7 +7,8 @@ const ROOT_DIR = __dirname;
 
 loadEnvFile();
 
-const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
+const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || process.env.DEEPSEEKAPIKEY;
+const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || process.env.DEEPSEEKMODEL || "deepseek-v4-flash";
 const DEFAULT_STORY = "高考结束了，你站在人生的第一个重要路口。未来会怎样，还没有答案。";
 const GENERIC_CHOICES = new Set([
   "继续努力",
@@ -311,9 +312,9 @@ function parseStoryResult(content) {
 }
 
 async function handleStoryRequest(request, response) {
-  if (!process.env.DEEPSEEK_API_KEY) {
+  if (!DEEPSEEK_API_KEY) {
     sendJson(response, 500, {
-      error: "还没有设置 DEEPSEEK_API_KEY。请先在 .env 文件里设置 DeepSeek API Key，再重新启动服务器。"
+      error: "还没有设置 DeepSeek API Key。请检查环境变量 DEEPSEEK_API_KEY 或 DEEPSEEKAPIKEY。"
     });
     return;
   }
@@ -361,7 +362,7 @@ async function handleStoryRequest(request, response) {
     const apiResponse = await fetch("https://api.deepseek.com/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+        "Authorization": `Bearer ${DEEPSEEK_API_KEY}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({

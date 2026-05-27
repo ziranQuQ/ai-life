@@ -71,7 +71,7 @@ if (choiceButtons.length > 0 && storyText) {
       } catch (error) {
         storyText.textContent = "你做出了选择，但命运暂时沉默。也许先停下来想想，是另一种前进。";
         updateChoices(fallbackChoices);
-        statusText.textContent = "命运的回声暂时模糊，先沿着眼前的路继续。";
+        statusText.textContent = "命运的回声暂时模糊：" + error.message;
       } finally {
         setLoading(false);
       }
