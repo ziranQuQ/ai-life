@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI人生模拟器 - 模拟页面</title>
+  <link rel="stylesheet" href="styles.css?v=4">
+</head>
+<body>
+  <main class="page">
+    <section class="panel">
+      <h1 id="welcomeTitle">人生初章 · 你</h1>
+      <p id="storyText" class="story">
+        高考结束了，你站在人生的第一个重要路口。未来会怎样，还没有答案。
+      </p>
+
+      <div class="choices">
+        <button type="button" data-choice="university">A 去上大学</button>
+        <button type="button" data-choice="work">B 去工作</button>
+        <button type="button" data-choice="startup">C 创业</button>
+      </div>
+
+      <p id="statusText" class="status" aria-live="polite"></p>
+
+      <a class="backLink" href="index.html">返回首页</a>
+    </section>
+  </main>
+
+  <script src="script.js?v=7"></script>
+</body>
+</html>

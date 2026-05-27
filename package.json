@@ -1,0 +1,10 @@
+{
+  "name": "ai-life-simulator",
+  "version": "0.1.0",
+  "description": "一个最小版本的 AI 人生模拟器网站",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "private": true
+}
