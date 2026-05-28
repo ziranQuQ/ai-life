@@ -5,7 +5,7 @@ const choiceButtons = document.querySelectorAll("[data-choice]");
 const statusText = document.querySelector("#statusText");
 const reflectionPanel = document.querySelector("#reflectionPanel");
 const serverOrigin = "http://localhost:8000";
-const saveVersion = 2;
+const saveVersion = 3;
 
 const fallbackChoices = ["整理眼前的风险", "联系一个关键人物", "做一个小规模尝试"];
 const params = new URLSearchParams(window.location.search);
@@ -95,7 +95,7 @@ function createInitialState() {
   return {
     name: playerName,
     stageIndex: 0,
-    stage: "人生初章",
+    stage: "高考之后",
     turn: 0,
     seeds: [],
     tendencies: [],
@@ -138,7 +138,8 @@ function updateGameState(gameState, choice, data) {
       stage: gameState.stage,
       choice: choice,
       result: data.story || "",
-      choiceType: data.choiceType || "unknown"
+      choiceType: data.choiceType || "unknown",
+      lifeDomain: data.lifeDomain || "日常"
     }).slice(-24)
   };
 

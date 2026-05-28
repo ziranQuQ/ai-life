@@ -10,61 +10,61 @@ loadEnvFile();
 const DEEPSEEK_API_KEY = cleanEnvValue(process.env.DEEPSEEK_API_KEY || process.env.DEEPSEEKAPIKEY);
 const DEEPSEEK_MODEL = normalizeDeepSeekModel(process.env.DEEPSEEK_MODEL || process.env.DEEPSEEKMODEL);
 const DEFAULT_STORY = "高考结束了，你站在人生的第一个重要路口。未来会怎样，还没有答案。";
+const TURNS_PER_STAGE = 9;
+const LIFE_DOMAINS = ["生计", "家庭", "关系", "健康", "居住", "自我", "时代", "偶然", "日常"];
 const LIFE_STAGES = [
   {
-    name: "人生初章",
-    ageRange: "18-22岁左右",
-    theme: "离开原点，第一次面对选择。围绕家庭、教育、家乡、第一份工作、有限认知与不确定。",
-    scene: "可以出现学校、考试、打工、家乡和初次离家。",
-    forbidden: "不要出现成熟职场权谋、中年家庭危机或资产配置。"
+    name: "高考之后",
+    scope: "起点来自高考之后，但不要默认只能上大学。生活可能围绕家乡、家庭期待、继续读书、打工、离开或留下展开。",
+    preferredDomains: ["家庭", "生计", "自我", "居住", "日常"],
+    forbidden: "不要出现成熟职场权谋、中年家庭危机或复杂资产配置。"
   },
   {
-    name: "独立谋生",
-    ageRange: "22-28岁左右",
-    theme: "自己承担生活，现实开始有重量。围绕房租、工资、技能、老板、同事、通勤、城市与自尊。",
-    scene: "主场景应转向出租屋、公司、店铺、通勤路、城市生活和谋生压力。",
+    name: "初入社会",
+    scope: "玩家开始自己承担生活成本。生活可能涉及房租、工资、老板、同事、通勤、城市适应、孤独和自尊。",
+    preferredDomains: ["生计", "居住", "关系", "自我", "日常"],
     forbidden: "不要再把学校、图书馆、习题、考试作为主线，除非只是短暂回忆。"
   },
   {
-    name: "欲望成形",
-    ageRange: "28-35岁左右",
-    theme: "玩家开始靠近自己真正想要的东西。围绕野心、爱情、自由、金钱、稳定、身份与理想。",
-    scene: "主场景应是职业选择、亲密关系、城市定居、副业、圈层变化和长期目标。",
+    name: "立身之年",
+    scope: "玩家逐渐建立生计、习惯、身份和关系。生活可能涉及技能、收入、住处、朋友圈、长期选择和自我位置。",
+    preferredDomains: ["生计", "关系", "居住", "家庭", "自我", "日常"],
     forbidden: "不要回到学生刷题主线，不要写成校园学习日常。"
   },
   {
-    name: "关系交错",
-    ageRange: "35-45岁左右",
-    theme: "他人的期待、陪伴、亏欠与分离进入人生。NPC 可以出现，但必须服务于玩家主线。",
-    scene: "主场景应是伴侣、朋友分化、父母老去、同事关系、承诺、照顾和错过。",
+    name: "风向渐明",
+    scope: "玩家的人生方向逐渐显出轮廓，但不要把阶段名当主题。生活可能涉及事业、关系、家庭、居住、健康习惯和自我追求。",
+    preferredDomains: ["生计", "关系", "家庭", "健康", "自我", "日常"],
     forbidden: "不要让 NPC 抢走主角，不要把剧情写成校园或学术解题。"
   },
   {
-    name: "代价显现",
-    ageRange: "45-55岁左右",
-    theme: "早年选择开始以不同形式回响。围绕健康、债务、机会成本、关系裂缝、职业瓶颈和旧伏笔。",
-    scene: "主场景应是身体检查、家庭责任、职业瓶颈、债务、机会错过、旧人重逢和选择回响。",
+    name: "不惑前后",
+    scope: "玩家开始更清楚地看见一些选择的代价和边界。生活可能涉及家庭责任、关系变化、职业瓶颈、健康、旧人和未完成的事。",
+    preferredDomains: ["家庭", "关系", "健康", "生计", "自我", "偶然"],
     forbidden: "不要写学校题目、专业公式、图书馆刷题或年轻学生语境。"
   },
   {
-    name: "深水区",
-    ageRange: "55-65岁左右",
-    theme: "玩家拥有了一些东西，也被一些东西固定。选择更少，但每一步更重。",
-    scene: "主场景应是职位、资产、家庭结构、健康限制、名声、孤独、守成或最后一次冒险。",
+    name: "半生已过",
+    scope: "过去的选择开始形成稳定形状。生活可能涉及资产、家庭结构、身体变化、关系距离、守成、转身或旧伏笔回响。",
+    preferredDomains: ["健康", "家庭", "关系", "生计", "居住", "自我"],
     forbidden: "严禁继续写学校、习题集、图书馆、高等数学、积分题、符号体系、学术推导作为剧情。"
   },
   {
-    name: "晚景回声",
-    ageRange: "65岁以后",
-    theme: "人生从争取转向整理、回望、延续或执念。不要统一写成安详。",
-    scene: "主场景应是整理旧物、身体变化、老友重逢、传承、放下、执念或最后远行。",
+    name: "深水之中",
+    scope: "玩家拥有了一些东西，也被一些东西固定。生活可能涉及位置、责任、名声、孤独、健康限制、守成或最后几次冒险。",
+    preferredDomains: ["健康", "家庭", "关系", "自我", "生计", "日常"],
     forbidden: "不要出现年轻学生场景作为主线。"
   },
   {
+    name: "晚景渐近",
+    scope: "外部变数逐渐减少，回声变多。生活可能涉及旧物、身体、老友、家人、传承、执念、日常和最后的远行。",
+    preferredDomains: ["健康", "关系", "家庭", "日常", "自我", "偶然"],
+    forbidden: "不要统一写成安详，不要写年轻学生主线。"
+  },
+  {
     name: "人生终章",
-    ageRange: "人生末段",
-    theme: "走马灯式总结，不评价，只回放。可以有克制的文学升华。",
-    scene: "回顾一生选择、得到、失去、生活碎片与未解问题。",
+    scope: "走马灯式总结，不评价，只回放。可以有克制的文学升华。",
+    preferredDomains: ["自我", "关系", "家庭", "日常"],
     forbidden: "不要评分，不要判定成功失败。"
   }
 ];
@@ -420,6 +420,7 @@ function normalizeStoryResult(result) {
     story: String(result.story || "").trim(),
     choices: Array.isArray(result.choices) ? result.choices.slice(0, 3) : buildFallbackChoices(result.story || ""),
     choiceType: normalizeChoiceType(result.choiceType),
+    lifeDomain: normalizeLifeDomain(result.lifeDomain),
     seeds: normalizeStringList(result.seeds, 4, 36),
     tendencies: normalizeStringList(result.tendencies, 4, 18),
     reflection: typeof result.reflection === "string" ? result.reflection.trim().slice(0, 220) : "",
@@ -444,6 +445,7 @@ function sanitizeStoryResult(result) {
     story: "这一段日子没有发生戏剧性的转折。你处理着眼前的生活、关系和责任，也在一些普通决定里慢慢改变自己的方向。",
     choices: ["把眼前的事先处理清楚", "给一个重要的人回消息", "让自己休息一个晚上"],
     choiceType: "flavor",
+    lifeDomain: "日常",
     source: "fallback"
   };
 }
@@ -452,6 +454,10 @@ function normalizeChoiceType(choiceType) {
   const allowedTypes = new Set(["major", "minor", "flavor"]);
 
   return allowedTypes.has(choiceType) ? choiceType : "minor";
+}
+
+function normalizeLifeDomain(lifeDomain) {
+  return LIFE_DOMAINS.includes(lifeDomain) ? lifeDomain : "日常";
 }
 
 function normalizeStringList(items, maxCount, maxLength) {
@@ -503,8 +509,39 @@ function formatRecentLifeLog(lifeLog) {
   }
 
   return lifeLog.slice(-5).map(function (item) {
-    return `${item.stage || "某阶段"}选择了「${item.choice || "未知选择"}」`;
+    const domain = item.lifeDomain ? `（${item.lifeDomain}）` : "";
+    return `${item.stage || "某阶段"}${domain}选择了「${item.choice || "未知选择"}」`;
   }).join("；");
+}
+
+function getRecentDomainGuidance(lifeLog, currentStage) {
+  const recentDomains = Array.isArray(lifeLog)
+    ? lifeLog.slice(-5).map(function (item) {
+      return item.lifeDomain;
+    }).filter(function (domain) {
+      return LIFE_DOMAINS.includes(domain);
+    })
+    : [];
+  const domainCounts = recentDomains.reduce(function (counts, domain) {
+    counts[domain] = (counts[domain] || 0) + 1;
+    return counts;
+  }, {});
+  const repeatedDomain = LIFE_DOMAINS.find(function (domain) {
+    return domainCounts[domain] >= 3;
+  });
+  const preferredDomains = Array.isArray(currentStage.preferredDomains)
+    ? currentStage.preferredDomains.join("、")
+    : LIFE_DOMAINS.join("、");
+
+  if (repeatedDomain) {
+    const alternatives = LIFE_DOMAINS.filter(function (domain) {
+      return domain !== repeatedDomain;
+    }).join("、");
+
+    return `最近「${repeatedDomain}」出现过多。本次除非玩家刚刚的选择强烈要求，否则请避开「${repeatedDomain}」，优先转向：${alternatives}。`;
+  }
+
+  return `本阶段可优先考虑这些生活领域：${preferredDomains}。也可以根据上一幕自然转向其他领域。`;
 }
 
 async function handleStoryRequest(request, response) {
@@ -524,7 +561,7 @@ async function handleStoryRequest(request, response) {
     const previousStory = String(body.previousStory || DEFAULT_STORY).slice(0, 1000);
     const gameState = normalizeGameState(body.gameState, playerName);
     const currentStage = LIFE_STAGES[gameState.stageIndex] || LIFE_STAGES[0];
-    const shouldAdvanceStage = gameState.turn > 0 && gameState.turn % 6 === 0 && gameState.stageIndex < LIFE_STAGES.length - 2;
+    const shouldAdvanceStage = gameState.turn > 0 && gameState.turn % TURNS_PER_STAGE === 0 && gameState.stageIndex < LIFE_STAGES.length - 2;
 
     const prompt = buildStoryPrompt({
       playerName,
@@ -552,6 +589,10 @@ function buildStoryPrompt(context) {
   const gameState = context.gameState;
   const currentStage = context.currentStage;
   const shouldAdvanceStage = context.shouldAdvanceStage;
+  const nextStage = LIFE_STAGES[gameState.stageIndex + 1] || currentStage;
+  const currentStageIndex = shouldAdvanceStage ? gameState.stageIndex + 1 : gameState.stageIndex;
+  const outputStage = shouldAdvanceStage ? nextStage.name : currentStage.name;
+  const domainGuidance = getRecentDomainGuidance(gameState.lifeLog, currentStage);
 
   return [
       "你正在为一个《AI人生模拟器》网页游戏生成下一幕。",
@@ -559,9 +600,7 @@ function buildStoryPrompt(context) {
       "【玩家资料】",
       `姓名：${playerName}`,
       `当前阶段：${currentStage.name}`,
-      `年龄与处境：${currentStage.ageRange}`,
-      `阶段主题：${currentStage.theme}`,
-      `阶段场景：${currentStage.scene}`,
+      `阶段气氛：${currentStage.scope}`,
       `阶段禁区：${currentStage.forbidden}`,
       `已经经历的选择次数：${gameState.turn}`,
       "",
@@ -575,10 +614,11 @@ function buildStoryPrompt(context) {
       `人生种子：${gameState.seeds.length ? gameState.seeds.join("；") : "暂无"}`,
       `人生倾向：${gameState.tendencies.length ? gameState.tendencies.join("；") : "暂无"}`,
       `最近选择：${formatRecentLifeLog(gameState.lifeLog)}`,
+      `生活领域轮换：${domainGuidance}`,
       "",
       "【生成目标】",
       "1. 写出这个选择造成的直接后果，而不是跳到无关场景。",
-      "2. 剧情必须符合当前阶段主题，不同阶段的认知、压力和可选路径必须不同。",
+      "2. 阶段名只代表时间气氛，不是剧情主题。不要把阶段名硬套成单一欲望、单一职业或单一关系。",
       "3. 剧情必须是现实人生模拟：学业、工作、家庭、金钱、关系、健康、城市生活、机会与压力。",
       "4. 如果出现游戏、聊天、娱乐，只能作为生活片段，不能让它吞掉人生主线。",
       "5. 不是每个选择都要站在人生岔路口。允许出现一个生活化、看似无关紧要的选项，它可能没有长期后果。",
@@ -591,21 +631,23 @@ function buildStoryPrompt(context) {
       "12. 禁止使用泛泛选项：继续努力、换个方向、先观察情况、主动尝试新机会、先积累更多信息、找信任的人商量。",
       "13. 面向普通大众玩家，文字要通俗、具体、可共情。严禁写高等数学、学术论文、专业公式、复杂理论、符号推导、曲面积分、三重积分等小众专业内容。",
       "14. 如果当前阶段已经不是人生初章，不要把学校、图书馆、刷题、考试、习题集作为主线。可以短暂回忆，但必须立刻回到当前年龄的现实处境。",
+      `15. 本次必须从这些生活领域里选择一个作为隐藏分类：${LIFE_DOMAINS.join("、")}。如果最近几幕都困在同一行业、同一地点、同一 NPC 或同一任务，请自然转向其他生活领域。`,
       shouldAdvanceStage
-        ? `15. 本次需要生成一个阶段回响 reflection，并自然进入下一阶段：${LIFE_STAGES[gameState.stageIndex + 1].name}。阶段回响中性总结这一阶段发生了什么、得到与失去、留下的碎片，不评分。`
-        : "15. 本次不需要阶段回响，reflection 返回空字符串。",
+        ? `16. 本次需要生成一个阶段回响 reflection，并自然进入下一阶段：${nextStage.name}。阶段回响中性总结这一阶段发生了什么、得到与失去、留下的碎片，不评分。`
+        : "16. 本次不需要阶段回响，reflection 返回空字符串。",
       "",
       "【输出格式】",
       "只返回合法 JSON，不要 Markdown，不要代码块，不要额外解释。",
-      "JSON 必须包含 story、choices、choiceType、seeds、tendencies、reflection、stage、stageIndex：",
-      "{\"story\":\"剧情文字\",\"choices\":[\"具体行动A\",\"具体行动B\",\"具体行动C\"],\"choiceType\":\"minor\",\"seeds\":[\"可能回响的生活种子\"],\"tendencies\":[\"自由\"],\"reflection\":\"\",\"stage\":\"人生初章\",\"stageIndex\":0}",
+      "JSON 必须包含 story、choices、choiceType、lifeDomain、seeds、tendencies、reflection、stage、stageIndex：",
+      "{\"story\":\"剧情文字\",\"choices\":[\"具体行动A\",\"具体行动B\",\"具体行动C\"],\"choiceType\":\"minor\",\"lifeDomain\":\"生计\",\"seeds\":[\"可能回响的生活种子\"],\"tendencies\":[\"自由\"],\"reflection\":\"\",\"stage\":\"高考之后\",\"stageIndex\":0}",
       "",
       "【字段说明】",
       "choiceType 只能是 major、minor、flavor 之一，代表刚才选择造成的影响级别，但不要在选项文字中体现。",
+      `lifeDomain 只能是以下之一：${LIFE_DOMAINS.join("、")}。这是隐藏字段，不要写进剧情或选项。`,
       "seeds 记录可能在未来回响的微小选择或生活碎片，可以为空数组。",
       "tendencies 记录玩家正在靠近的价值倾向，例如自由、安稳、家庭、理想、财富、权力、亲密、孤独，可以为空数组。",
-      `stage 当前应为 ${shouldAdvanceStage ? LIFE_STAGES[gameState.stageIndex + 1].name : currentStage.name}。`,
-      `stageIndex 当前应为 ${shouldAdvanceStage ? gameState.stageIndex + 1 : gameState.stageIndex}。`
+      `stage 当前应为 ${outputStage}。`,
+      `stageIndex 当前应为 ${currentStageIndex}。`
     ].join("\n");
 }
 
@@ -631,9 +673,11 @@ async function requestStoryFromAI(prompt, shouldAdvanceStage) {
               "你是严肃现实向的人生模拟器编剧。",
               "你的任务是根据上一幕和玩家选择，生成有因果连续性的下一幕。",
               "永远保持现实主义，不跑题，不把无关娱乐内容变成主线。",
+              "阶段名只是时间气氛，不是剧情模板；不要围绕同一个职业、学校、NPC、地点或任务连续打转。",
+              "你需要在生计、家庭、关系、健康、居住、自我、时代、偶然、日常之间自然轮换生活领域。",
               "你写给普通大众玩家，不写小众专业题材、高等数学、学术推导或晦涩理论。",
               "人生阶段必须随时间推进；后期阶段不能继续停留在学校刷题或校园主线。",
-              "你必须只输出合法 JSON，字段为 story 和 choices。"
+              "你必须只输出合法 JSON。"
             ].join("\n")
           },
           {
