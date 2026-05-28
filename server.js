@@ -10,6 +10,40 @@ loadEnvFile();
 const DEEPSEEK_API_KEY = cleanEnvValue(process.env.DEEPSEEK_API_KEY || process.env.DEEPSEEKAPIKEY);
 const DEEPSEEK_MODEL = normalizeDeepSeekModel(process.env.DEEPSEEK_MODEL || process.env.DEEPSEEKMODEL);
 const DEFAULT_STORY = "高考结束了，你站在人生的第一个重要路口。未来会怎样，还没有答案。";
+const LIFE_STAGES = [
+  {
+    name: "人生初章",
+    theme: "离开原点，第一次面对选择。围绕家庭、教育、家乡、第一份工作、有限认知与不确定。"
+  },
+  {
+    name: "独立谋生",
+    theme: "自己承担生活，现实开始有重量。围绕房租、工资、技能、老板、同事、通勤、城市与自尊。"
+  },
+  {
+    name: "欲望成形",
+    theme: "玩家开始靠近自己真正想要的东西。围绕野心、爱情、自由、金钱、稳定、身份与理想。"
+  },
+  {
+    name: "关系交错",
+    theme: "他人的期待、陪伴、亏欠与分离进入人生。NPC 可以出现，但必须服务于玩家主线。"
+  },
+  {
+    name: "代价显现",
+    theme: "早年选择开始以不同形式回响。围绕健康、债务、机会成本、关系裂缝、职业瓶颈和旧伏笔。"
+  },
+  {
+    name: "深水区",
+    theme: "玩家拥有了一些东西，也被一些东西固定。选择更少，但每一步更重。"
+  },
+  {
+    name: "晚景回声",
+    theme: "人生从争取转向整理、回望、延续或执念。不要统一写成安详。"
+  },
+  {
+    name: "人生终章",
+    theme: "走马灯式总结，不评价，只回放。可以有克制的文学升华。"
+  }
+];
 const GENERIC_CHOICES = new Set([
   "继续努力",
   "换个方向",
@@ -175,11 +209,11 @@ function parseLooseStoryResult(content) {
   }
 
   if (story && choices.length >= 3 && !hasGenericChoices(choices.slice(0, 3))) {
-    return {
+    return normalizeStoryResult({
       story,
       choices: choices.slice(0, 3),
       source: "ai"
-    };
+    });
   }
 
   return null;
@@ -319,7 +353,7 @@ function parseStoryResult(content) {
       };
     }
 
-    return { story, choices, source: "ai" };
+    return normalizeStoryResult({ ...result, story, choices, source: "ai" });
   } catch (error) {
     const looseResult = parseLooseStoryResult(content);
 
@@ -329,6 +363,81 @@ function parseStoryResult(content) {
 
     return fallbackResult;
   }
+}
+
+function normalizeStoryResult(result) {
+  const stageIndex = Number.isInteger(result.stageIndex) ? result.stageIndex : undefined;
+
+  return {
+    story: String(result.story || "").trim(),
+    choices: Array.isArray(result.choices) ? result.choices.slice(0, 3) : buildFallbackChoices(result.story || ""),
+    choiceType: normalizeChoiceType(result.choiceType),
+    seeds: normalizeStringList(result.seeds, 4, 36),
+    tendencies: normalizeStringList(result.tendencies, 4, 18),
+    reflection: typeof result.reflection === "string" ? result.reflection.trim().slice(0, 220) : "",
+    stage: typeof result.stage === "string" ? result.stage.trim().slice(0, 12) : undefined,
+    stageIndex,
+    source: result.source || "ai"
+  };
+}
+
+function normalizeChoiceType(choiceType) {
+  const allowedTypes = new Set(["major", "minor", "flavor"]);
+
+  return allowedTypes.has(choiceType) ? choiceType : "minor";
+}
+
+function normalizeStringList(items, maxCount, maxLength) {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+
+  return items
+    .filter(function (item) {
+      return typeof item === "string" && item.trim();
+    })
+    .map(function (item) {
+      return item.trim().slice(0, maxLength);
+    })
+    .slice(0, maxCount);
+}
+
+function normalizeGameState(gameState, playerName) {
+  if (!gameState || typeof gameState !== "object") {
+    return {
+      name: playerName,
+      stageIndex: 0,
+      stage: LIFE_STAGES[0].name,
+      turn: 0,
+      seeds: [],
+      tendencies: [],
+      lifeLog: []
+    };
+  }
+
+  const stageIndex = Number.isInteger(gameState.stageIndex)
+    ? Math.min(Math.max(gameState.stageIndex, 0), LIFE_STAGES.length - 1)
+    : 0;
+
+  return {
+    name: playerName,
+    stageIndex,
+    stage: LIFE_STAGES[stageIndex].name,
+    turn: Number.isInteger(gameState.turn) ? Math.max(gameState.turn, 0) : 0,
+    seeds: normalizeStringList(gameState.seeds, 12, 36),
+    tendencies: normalizeStringList(gameState.tendencies, 8, 18),
+    lifeLog: Array.isArray(gameState.lifeLog) ? gameState.lifeLog.slice(-8) : []
+  };
+}
+
+function formatRecentLifeLog(lifeLog) {
+  if (!Array.isArray(lifeLog) || lifeLog.length === 0) {
+    return "暂无";
+  }
+
+  return lifeLog.slice(-5).map(function (item) {
+    return `${item.stage || "某阶段"}选择了「${item.choice || "未知选择"}」`;
+  }).join("；");
 }
 
 async function handleStoryRequest(request, response) {
@@ -346,13 +455,18 @@ async function handleStoryRequest(request, response) {
     const playerName = String(body.name || "玩家").slice(0, 30);
     const choiceText = getChoiceText(body.choice);
     const previousStory = String(body.previousStory || DEFAULT_STORY).slice(0, 1000);
+    const gameState = normalizeGameState(body.gameState, playerName);
+    const currentStage = LIFE_STAGES[gameState.stageIndex] || LIFE_STAGES[0];
+    const shouldAdvanceStage = gameState.turn > 0 && gameState.turn % 6 === 0 && gameState.stageIndex < LIFE_STAGES.length - 2;
 
     const prompt = [
       "你正在为一个《AI人生模拟器》网页游戏生成下一幕。",
       "",
       "【玩家资料】",
       `姓名：${playerName}`,
-      "年龄：18岁",
+      `当前阶段：${currentStage.name}`,
+      `阶段主题：${currentStage.theme}`,
+      `已经经历的选择次数：${gameState.turn}`,
       "",
       "【上一幕】",
       previousStory,
@@ -360,23 +474,39 @@ async function handleStoryRequest(request, response) {
       "【玩家刚刚点击的选择】",
       choiceText,
       "",
+      "【人生档案】",
+      `人生种子：${gameState.seeds.length ? gameState.seeds.join("；") : "暂无"}`,
+      `人生倾向：${gameState.tendencies.length ? gameState.tendencies.join("；") : "暂无"}`,
+      `最近选择：${formatRecentLifeLog(gameState.lifeLog)}`,
+      "",
       "【生成目标】",
       "1. 写出这个选择造成的直接后果，而不是跳到无关场景。",
-      "2. 剧情必须是现实人生模拟：学业、工作、家庭、金钱、关系、健康、城市生活、机会与压力。",
-      "3. 如果出现游戏、聊天、娱乐，只能作为生活片段，不能让它吞掉人生主线。",
-      "4. 不要突然引入和上一幕无关的人名、职业、地点或事件。",
-      "5. 不要写成爽文、玄幻、科幻、战斗、系统流或搞笑段子。",
-      "6. 剧情 80 到 140 个中文字符，具体、有画面、有因果。",
-      "7. 三个选项必须紧扣刚生成的剧情，每个选项都要是玩家下一步能做的具体行动。",
-      "8. 禁止使用泛泛选项：继续努力、换个方向、先观察情况、主动尝试新机会、先积累更多信息、找信任的人商量。",
+      "2. 剧情必须符合当前阶段主题，不同阶段的认知、压力和可选路径必须不同。",
+      "3. 剧情必须是现实人生模拟：学业、工作、家庭、金钱、关系、健康、城市生活、机会与压力。",
+      "4. 如果出现游戏、聊天、娱乐，只能作为生活片段，不能让它吞掉人生主线。",
+      "5. 不是每个选择都要站在人生岔路口。允许出现一个生活化、看似无关紧要的选项，它可能没有长期后果。",
+      "6. 玩家不知道哪个选择会成为伏笔。不要显式标注选项重要程度。",
+      "7. 关键事件必须稀有。本次除非人生档案自然指向关键回响，否则不要制造重大转折。",
+      "8. NPC 可以出现，但必须服务于玩家个人主线，不要抢走主角位置。",
+      "9. 不要评价玩家选择好坏，不要给分，不要使用成功、失败、正确、错误等评判词。",
+      "10. 剧情 80 到 140 个中文字符，具体、有画面、有因果。",
+      "11. 三个选项必须符合当前场景：可以包含重大选择、生活选择或日常选择，但都要自然。",
+      "12. 禁止使用泛泛选项：继续努力、换个方向、先观察情况、主动尝试新机会、先积累更多信息、找信任的人商量。",
+      shouldAdvanceStage
+        ? `13. 本次需要生成一个阶段回响 reflection，并自然进入下一阶段：${LIFE_STAGES[gameState.stageIndex + 1].name}。阶段回响中性总结这一阶段发生了什么、得到与失去、留下的碎片，不评分。`
+        : "13. 本次不需要阶段回响，reflection 返回空字符串。",
       "",
       "【输出格式】",
       "只返回合法 JSON，不要 Markdown，不要代码块，不要额外解释。",
-      "JSON 必须包含 story 和 choices：",
-      "{\"story\":\"剧情文字\",\"choices\":[\"具体行动A\",\"具体行动B\",\"具体行动C\"]}",
+      "JSON 必须包含 story、choices、choiceType、seeds、tendencies、reflection、stage、stageIndex：",
+      "{\"story\":\"剧情文字\",\"choices\":[\"具体行动A\",\"具体行动B\",\"具体行动C\"],\"choiceType\":\"minor\",\"seeds\":[\"可能回响的生活种子\"],\"tendencies\":[\"自由\"],\"reflection\":\"\",\"stage\":\"人生初章\",\"stageIndex\":0}",
       "",
-      "【好例子】",
-      "{\"story\":\"你把录取通知书放在桌上，母亲算着学费沉默了很久。县城的夏夜很闷，你第一次意识到，大学不只是远方，也是一笔现实的账。\",\"choices\":[\"申请助学贷款\",\"暑假去打短工\",\"和母亲重新算预算\"]}"
+      "【字段说明】",
+      "choiceType 只能是 major、minor、flavor 之一，代表刚才选择造成的影响级别，但不要在选项文字中体现。",
+      "seeds 记录可能在未来回响的微小选择或生活碎片，可以为空数组。",
+      "tendencies 记录玩家正在靠近的价值倾向，例如自由、安稳、家庭、理想、财富、权力、亲密、孤独，可以为空数组。",
+      `stage 当前应为 ${shouldAdvanceStage ? LIFE_STAGES[gameState.stageIndex + 1].name : currentStage.name}。`,
+      `stageIndex 当前应为 ${shouldAdvanceStage ? gameState.stageIndex + 1 : gameState.stageIndex}。`
     ].join("\n");
 
     const apiResponse = await fetch("https://api.deepseek.com/chat/completions", {

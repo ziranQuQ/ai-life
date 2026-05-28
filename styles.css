@@ -81,6 +81,16 @@ h1 {
   color: var(--ink);
 }
 
+.reflection {
+  margin: -14px 0 28px;
+  padding: 16px 18px;
+  font-size: 15px;
+  line-height: 1.75;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.34);
+  border-left: 3px solid var(--line-strong);
+}
+
 .form {
   display: grid;
   gap: 14px;

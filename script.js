@@ -3,12 +3,13 @@ const welcomeTitle = document.querySelector("#welcomeTitle");
 const storyText = document.querySelector("#storyText");
 const choiceButtons = document.querySelectorAll("[data-choice]");
 const statusText = document.querySelector("#statusText");
+const reflectionPanel = document.querySelector("#reflectionPanel");
 const serverOrigin = "http://localhost:8000";
 
 const fallbackChoices = ["整理眼前的风险", "联系一个关键人物", "做一个小规模尝试"];
-
 const params = new URLSearchParams(window.location.search);
 const playerName = params.get("name") || "你";
+const stateKey = "aiLifeSimulatorState:" + playerName;
 
 if (startForm) {
   startForm.addEventListener("submit", function (event) {
@@ -22,18 +23,22 @@ if (startForm) {
       return;
     }
 
+    localStorage.removeItem("aiLifeSimulatorState:" + playerName);
+
     const nextPage = "/simulation.html?name=" + encodeURIComponent(playerName);
     window.location.href = window.location.protocol === "file:" ? serverOrigin + nextPage : nextPage;
   });
 }
 
 if (welcomeTitle) {
-  welcomeTitle.textContent = "人生初章 · " + playerName;
+  const gameState = loadGameState();
+  renderGameState(gameState);
 }
 
 if (choiceButtons.length > 0 && storyText) {
   choiceButtons.forEach(function (button) {
     button.addEventListener("click", async function () {
+      const gameState = loadGameState();
       const choice = button.dataset.choice || button.textContent;
 
       setLoading(true);
@@ -53,7 +58,8 @@ if (choiceButtons.length > 0 && storyText) {
           body: JSON.stringify({
             name: playerName,
             choice: choice,
-            previousStory: storyText.textContent
+            previousStory: storyText.textContent,
+            gameState: gameState
           })
         });
 
@@ -65,8 +71,13 @@ if (choiceButtons.length > 0 && storyText) {
 
         storyText.textContent = data.story || "你做出了选择，人生进入了新的阶段。";
         updateChoices(data.choices || fallbackChoices);
-        statusText.textContent = data.source === "fallback"
-          ? "剧情已生成，选项由备用逻辑生成。"
+
+        const nextState = updateGameState(gameState, choice, data);
+        saveGameState(nextState);
+        renderGameState(nextState);
+
+        statusText.textContent = data.reflection
+          ? "这一段日子留下了新的回声。"
           : "命运收下了你的答案，并递来了新的提问。";
       } catch (error) {
         storyText.textContent = "你做出了选择，但命运暂时沉默。也许先停下来想想，是另一种前进。";
@@ -77,6 +88,87 @@ if (choiceButtons.length > 0 && storyText) {
       }
     });
   });
+}
+
+function createInitialState() {
+  return {
+    name: playerName,
+    stageIndex: 0,
+    stage: "人生初章",
+    turn: 0,
+    seeds: [],
+    tendencies: [],
+    lifeLog: []
+  };
+}
+
+function loadGameState() {
+  try {
+    const savedState = JSON.parse(localStorage.getItem(stateKey));
+
+    if (savedState && savedState.name === playerName) {
+      return savedState;
+    }
+  } catch (error) {
+    localStorage.removeItem(stateKey);
+  }
+
+  const initialState = createInitialState();
+  saveGameState(initialState);
+  return initialState;
+}
+
+function saveGameState(gameState) {
+  localStorage.setItem(stateKey, JSON.stringify(gameState));
+}
+
+function updateGameState(gameState, choice, data) {
+  const nextState = {
+    ...gameState,
+    stage: data.stage || gameState.stage,
+    stageIndex: Number.isInteger(data.stageIndex) ? data.stageIndex : gameState.stageIndex,
+    turn: gameState.turn + 1,
+    seeds: mergeUnique(gameState.seeds, data.seeds || [], 12),
+    tendencies: mergeUnique(gameState.tendencies, data.tendencies || [], 8),
+    lastReflection: data.reflection || "",
+    lifeLog: gameState.lifeLog.concat({
+      stage: gameState.stage,
+      choice: choice,
+      result: data.story || "",
+      choiceType: data.choiceType || "unknown"
+    }).slice(-24)
+  };
+
+  return nextState;
+}
+
+function mergeUnique(currentItems, newItems, maxCount) {
+  const items = currentItems.concat(newItems)
+    .filter(function (item) {
+      return typeof item === "string" && item.trim();
+    })
+    .map(function (item) {
+      return item.trim();
+    });
+
+  return Array.from(new Set(items)).slice(-maxCount);
+}
+
+function renderGameState(gameState) {
+  welcomeTitle.textContent = gameState.stage + " · " + playerName;
+
+  if (!reflectionPanel) {
+    return;
+  }
+
+  if (!gameState.lastReflection) {
+    reflectionPanel.hidden = true;
+    reflectionPanel.textContent = "";
+    return;
+  }
+
+  reflectionPanel.hidden = false;
+  reflectionPanel.textContent = gameState.lastReflection;
 }
 
 function setLoading(isLoading) {
