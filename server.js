@@ -322,38 +322,7 @@ function parseStoryResult(content) {
   };
 
   try {
-    const result = JSON.parse(repairLooseJson(jsonText));
-    const story = typeof result.story === "string"
-      ? result.story.trim()
-      : typeof result["剧情"] === "string"
-        ? result["剧情"].trim()
-        : "";
-    const rawChoices = Array.isArray(result.choices)
-      ? result.choices
-      : Array.isArray(result.options)
-        ? result.options
-        : Array.isArray(result["选项"])
-          ? result["选项"]
-          : [];
-    const choices = rawChoices
-      .filter(function (choice) {
-        return typeof choice === "string" && choice.trim();
-      })
-      .map(function (choice) {
-        return normalizeChoiceText(choice);
-      })
-      .filter(Boolean)
-      .slice(0, 3);
-
-    if (!story || choices.length !== 3 || hasGenericChoices(choices)) {
-      return {
-        story: story || fallbackResult.story,
-        choices: buildFallbackChoices(story || fallbackResult.story),
-        source: "fallback"
-      };
-    }
-
-    return normalizeStoryResult({ ...result, story, choices, source: "ai" });
+    return parseJsonStoryResult(jsonText, fallbackResult);
   } catch (error) {
     const looseResult = parseLooseStoryResult(content);
 
@@ -363,6 +332,48 @@ function parseStoryResult(content) {
 
     return fallbackResult;
   }
+}
+
+function parseJsonStoryResult(jsonText, fallbackResult) {
+  let result;
+
+  try {
+    result = JSON.parse(jsonText);
+  } catch (error) {
+    result = JSON.parse(repairLooseJson(jsonText));
+  }
+
+  const story = typeof result.story === "string"
+    ? result.story.trim()
+    : typeof result["剧情"] === "string"
+      ? result["剧情"].trim()
+      : "";
+  const rawChoices = Array.isArray(result.choices)
+    ? result.choices
+    : Array.isArray(result.options)
+      ? result.options
+      : Array.isArray(result["选项"])
+        ? result["选项"]
+        : [];
+  const choices = rawChoices
+    .filter(function (choice) {
+      return typeof choice === "string" && choice.trim();
+    })
+    .map(function (choice) {
+      return normalizeChoiceText(choice);
+    })
+    .filter(Boolean)
+    .slice(0, 3);
+
+  if (!story || choices.length !== 3 || hasGenericChoices(choices)) {
+    return {
+      story: story || fallbackResult.story,
+      choices: buildFallbackChoices(story || fallbackResult.story),
+      source: "fallback"
+    };
+  }
+
+  return normalizeStoryResult({ ...result, story, choices, source: "ai" });
 }
 
 function normalizeStoryResult(result) {
@@ -592,7 +603,7 @@ function serveStaticFile(request, response) {
 
 const server = http.createServer(function (request, response) {
   if (request.method === "GET" && request.url === "/api/debug-parse") {
-    sendJson(response, 200, parseStoryResult("{ \"story\": \"你拨通镇民政所的电话，工作人员告知需要本人携带身份证和户口本原件前来办理，且今天下午他们开会不办公，建议明天上午来。挂断电话，你意识到这意味着要多花一天时间和往返车费。\", \"choices\": [ \"借辆自行车，现在骑几十里路去镇上碰碰运气\", \"先回打工的餐馆请假，明天一早坐班车去\", \"打电话给同村在镇上住的亲戚，问能否代办” ] }"));
+    sendJson(response, 200, parseStoryResult("{ \"story\": \"第二天你去了城西的批发市场，找到一家卖散装饮料的仓库，价格比老刘那边低三成。老板是个秃顶男人，拍着胸脯说“都是正厂尾货，喝不死人”。你提了两箱回去，开瓶一尝，甜味淡了不少，气泡也软绵绵的。\", \"choices\": [ \"先将就卖着，反正便宜，薄利多销\", \"再找找其他批发商，看有没有质量稍好但价格适中的\", \"去找老刘，问能不能降点价拿原来那种\" ], \"choiceType\": \"minor\", \"seeds\": [\"散装饮料质量差\"], \"tendencies\": [\"自由\"], \"reflection\": \"\", \"stage\": \"人生初章\", \"stageIndex\": 0 }"));
     return;
   }
 
