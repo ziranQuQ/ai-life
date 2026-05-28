@@ -13,36 +13,71 @@ const DEFAULT_STORY = "高考结束了，你站在人生的第一个重要路口
 const LIFE_STAGES = [
   {
     name: "人生初章",
-    theme: "离开原点，第一次面对选择。围绕家庭、教育、家乡、第一份工作、有限认知与不确定。"
+    ageRange: "18-22岁左右",
+    theme: "离开原点，第一次面对选择。围绕家庭、教育、家乡、第一份工作、有限认知与不确定。",
+    scene: "可以出现学校、考试、打工、家乡和初次离家。",
+    forbidden: "不要出现成熟职场权谋、中年家庭危机或资产配置。"
   },
   {
     name: "独立谋生",
-    theme: "自己承担生活，现实开始有重量。围绕房租、工资、技能、老板、同事、通勤、城市与自尊。"
+    ageRange: "22-28岁左右",
+    theme: "自己承担生活，现实开始有重量。围绕房租、工资、技能、老板、同事、通勤、城市与自尊。",
+    scene: "主场景应转向出租屋、公司、店铺、通勤路、城市生活和谋生压力。",
+    forbidden: "不要再把学校、图书馆、习题、考试作为主线，除非只是短暂回忆。"
   },
   {
     name: "欲望成形",
-    theme: "玩家开始靠近自己真正想要的东西。围绕野心、爱情、自由、金钱、稳定、身份与理想。"
+    ageRange: "28-35岁左右",
+    theme: "玩家开始靠近自己真正想要的东西。围绕野心、爱情、自由、金钱、稳定、身份与理想。",
+    scene: "主场景应是职业选择、亲密关系、城市定居、副业、圈层变化和长期目标。",
+    forbidden: "不要回到学生刷题主线，不要写成校园学习日常。"
   },
   {
     name: "关系交错",
-    theme: "他人的期待、陪伴、亏欠与分离进入人生。NPC 可以出现，但必须服务于玩家主线。"
+    ageRange: "35-45岁左右",
+    theme: "他人的期待、陪伴、亏欠与分离进入人生。NPC 可以出现，但必须服务于玩家主线。",
+    scene: "主场景应是伴侣、朋友分化、父母老去、同事关系、承诺、照顾和错过。",
+    forbidden: "不要让 NPC 抢走主角，不要把剧情写成校园或学术解题。"
   },
   {
     name: "代价显现",
-    theme: "早年选择开始以不同形式回响。围绕健康、债务、机会成本、关系裂缝、职业瓶颈和旧伏笔。"
+    ageRange: "45-55岁左右",
+    theme: "早年选择开始以不同形式回响。围绕健康、债务、机会成本、关系裂缝、职业瓶颈和旧伏笔。",
+    scene: "主场景应是身体检查、家庭责任、职业瓶颈、债务、机会错过、旧人重逢和选择回响。",
+    forbidden: "不要写学校题目、专业公式、图书馆刷题或年轻学生语境。"
   },
   {
     name: "深水区",
-    theme: "玩家拥有了一些东西，也被一些东西固定。选择更少，但每一步更重。"
+    ageRange: "55-65岁左右",
+    theme: "玩家拥有了一些东西，也被一些东西固定。选择更少，但每一步更重。",
+    scene: "主场景应是职位、资产、家庭结构、健康限制、名声、孤独、守成或最后一次冒险。",
+    forbidden: "严禁继续写学校、习题集、图书馆、高等数学、积分题、符号体系、学术推导作为剧情。"
   },
   {
     name: "晚景回声",
-    theme: "人生从争取转向整理、回望、延续或执念。不要统一写成安详。"
+    ageRange: "65岁以后",
+    theme: "人生从争取转向整理、回望、延续或执念。不要统一写成安详。",
+    scene: "主场景应是整理旧物、身体变化、老友重逢、传承、放下、执念或最后远行。",
+    forbidden: "不要出现年轻学生场景作为主线。"
   },
   {
     name: "人生终章",
-    theme: "走马灯式总结，不评价，只回放。可以有克制的文学升华。"
+    ageRange: "人生末段",
+    theme: "走马灯式总结，不评价，只回放。可以有克制的文学升华。",
+    scene: "回顾一生选择、得到、失去、生活碎片与未解问题。",
+    forbidden: "不要评分，不要判定成功失败。"
   }
+];
+const UNIVERSAL_FORBIDDEN_TOPICS = [
+  "三重积分",
+  "曲面积分",
+  "换元",
+  "柱面坐标",
+  "球坐标",
+  "参数化",
+  "证明题",
+  "符号体系",
+  "习题集"
 ];
 const GENERIC_CHOICES = new Set([
   "继续努力",
@@ -323,15 +358,16 @@ function parseStoryResult(content) {
   };
 
   try {
-    return parseJsonStoryResult(jsonText, fallbackResult);
+    const parsedResult = parseJsonStoryResult(jsonText, fallbackResult);
+    return sanitizeStoryResult(parsedResult);
   } catch (error) {
     const looseResult = parseLooseStoryResult(content);
 
     if (looseResult) {
-      return looseResult;
+      return sanitizeStoryResult(looseResult);
     }
 
-    return fallbackResult;
+    return sanitizeStoryResult(fallbackResult);
   }
 }
 
@@ -390,6 +426,25 @@ function normalizeStoryResult(result) {
     stage: typeof result.stage === "string" ? result.stage.trim().slice(0, 12) : undefined,
     stageIndex,
     source: result.source || "ai"
+  };
+}
+
+function sanitizeStoryResult(result) {
+  const story = String(result.story || "");
+  const hasForbiddenTopic = UNIVERSAL_FORBIDDEN_TOPICS.some(function (topic) {
+    return story.includes(topic);
+  });
+
+  if (!hasForbiddenTopic) {
+    return result;
+  }
+
+  return {
+    ...result,
+    story: "这一段日子没有发生戏剧性的转折。你处理着眼前的生活、关系和责任，也在一些普通决定里慢慢改变自己的方向。",
+    choices: ["把眼前的事先处理清楚", "给一个重要的人回消息", "让自己休息一个晚上"],
+    choiceType: "flavor",
+    source: "fallback"
   };
 }
 
@@ -504,7 +559,10 @@ function buildStoryPrompt(context) {
       "【玩家资料】",
       `姓名：${playerName}`,
       `当前阶段：${currentStage.name}`,
+      `年龄与处境：${currentStage.ageRange}`,
       `阶段主题：${currentStage.theme}`,
+      `阶段场景：${currentStage.scene}`,
+      `阶段禁区：${currentStage.forbidden}`,
       `已经经历的选择次数：${gameState.turn}`,
       "",
       "【上一幕】",
@@ -531,9 +589,11 @@ function buildStoryPrompt(context) {
       "10. 剧情 80 到 140 个中文字符，具体、有画面、有因果。",
       "11. 三个选项必须符合当前场景：可以包含重大选择、生活选择或日常选择，但都要自然。",
       "12. 禁止使用泛泛选项：继续努力、换个方向、先观察情况、主动尝试新机会、先积累更多信息、找信任的人商量。",
+      "13. 面向普通大众玩家，文字要通俗、具体、可共情。严禁写高等数学、学术论文、专业公式、复杂理论、符号推导、曲面积分、三重积分等小众专业内容。",
+      "14. 如果当前阶段已经不是人生初章，不要把学校、图书馆、刷题、考试、习题集作为主线。可以短暂回忆，但必须立刻回到当前年龄的现实处境。",
       shouldAdvanceStage
-        ? `13. 本次需要生成一个阶段回响 reflection，并自然进入下一阶段：${LIFE_STAGES[gameState.stageIndex + 1].name}。阶段回响中性总结这一阶段发生了什么、得到与失去、留下的碎片，不评分。`
-        : "13. 本次不需要阶段回响，reflection 返回空字符串。",
+        ? `15. 本次需要生成一个阶段回响 reflection，并自然进入下一阶段：${LIFE_STAGES[gameState.stageIndex + 1].name}。阶段回响中性总结这一阶段发生了什么、得到与失去、留下的碎片，不评分。`
+        : "15. 本次不需要阶段回响，reflection 返回空字符串。",
       "",
       "【输出格式】",
       "只返回合法 JSON，不要 Markdown，不要代码块，不要额外解释。",
@@ -571,6 +631,8 @@ async function requestStoryFromAI(prompt, shouldAdvanceStage) {
               "你是严肃现实向的人生模拟器编剧。",
               "你的任务是根据上一幕和玩家选择，生成有因果连续性的下一幕。",
               "永远保持现实主义，不跑题，不把无关娱乐内容变成主线。",
+              "你写给普通大众玩家，不写小众专业题材、高等数学、学术推导或晦涩理论。",
+              "人生阶段必须随时间推进；后期阶段不能继续停留在学校刷题或校园主线。",
               "你必须只输出合法 JSON，字段为 story 和 choices。"
             ].join("\n")
           },

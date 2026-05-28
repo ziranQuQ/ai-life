@@ -5,6 +5,7 @@ const choiceButtons = document.querySelectorAll("[data-choice]");
 const statusText = document.querySelector("#statusText");
 const reflectionPanel = document.querySelector("#reflectionPanel");
 const serverOrigin = "http://localhost:8000";
+const saveVersion = 2;
 
 const fallbackChoices = ["整理眼前的风险", "联系一个关键人物", "做一个小规模尝试"];
 const params = new URLSearchParams(window.location.search);
@@ -98,7 +99,8 @@ function createInitialState() {
     turn: 0,
     seeds: [],
     tendencies: [],
-    lifeLog: []
+    lifeLog: [],
+    saveVersion: saveVersion
   };
 }
 
@@ -106,7 +108,7 @@ function loadGameState() {
   try {
     const savedState = JSON.parse(localStorage.getItem(stateKey));
 
-    if (savedState && savedState.name === playerName) {
+    if (savedState && savedState.name === playerName && savedState.saveVersion === saveVersion) {
       return savedState;
     }
   } catch (error) {
@@ -131,6 +133,7 @@ function updateGameState(gameState, choice, data) {
     seeds: mergeUnique(gameState.seeds, data.seeds || [], 12),
     tendencies: mergeUnique(gameState.tendencies, data.tendencies || [], 8),
     lastReflection: data.reflection || "",
+    saveVersion: saveVersion,
     lifeLog: gameState.lifeLog.concat({
       stage: gameState.stage,
       choice: choice,
