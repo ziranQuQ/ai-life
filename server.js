@@ -52,6 +52,7 @@ const GENERIC_CHOICES = new Set([
   "先积累更多信息",
   "找信任的人商量"
 ]);
+const MAX_AI_RETRIES = 2;
 
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
@@ -470,7 +471,34 @@ async function handleStoryRequest(request, response) {
     const currentStage = LIFE_STAGES[gameState.stageIndex] || LIFE_STAGES[0];
     const shouldAdvanceStage = gameState.turn > 0 && gameState.turn % 6 === 0 && gameState.stageIndex < LIFE_STAGES.length - 2;
 
-    const prompt = [
+    const prompt = buildStoryPrompt({
+      playerName,
+      choiceText,
+      previousStory,
+      gameState,
+      currentStage,
+      shouldAdvanceStage
+    });
+
+    const data = await requestStoryFromAI(prompt, shouldAdvanceStage);
+    const content = extractDeepSeekContent(data);
+    const result = parseStoryResult(content);
+
+    sendJson(response, 200, result);
+  } catch (error) {
+    sendJson(response, 500, { error: error.message || "服务器出错了" });
+  }
+}
+
+function buildStoryPrompt(context) {
+  const playerName = context.playerName;
+  const choiceText = context.choiceText;
+  const previousStory = context.previousStory;
+  const gameState = context.gameState;
+  const currentStage = context.currentStage;
+  const shouldAdvanceStage = context.shouldAdvanceStage;
+
+  return [
       "你正在为一个《AI人生模拟器》网页游戏生成下一幕。",
       "",
       "【玩家资料】",
@@ -519,7 +547,15 @@ async function handleStoryRequest(request, response) {
       `stage 当前应为 ${shouldAdvanceStage ? LIFE_STAGES[gameState.stageIndex + 1].name : currentStage.name}。`,
       `stageIndex 当前应为 ${shouldAdvanceStage ? gameState.stageIndex + 1 : gameState.stageIndex}。`
     ].join("\n");
+}
 
+async function requestStoryFromAI(prompt, shouldAdvanceStage) {
+  let lastErrorMessage = "AI 生成失败";
+
+  for (let attempt = 1; attempt <= MAX_AI_RETRIES; attempt += 1) {
+    const compactInstruction = attempt > 1
+      ? "\n\n【重试要求】上一次输出过长。请严格缩短：story 不超过 90 个中文字符，reflection 不超过 80 个中文字符，choices 每项不超过 16 个中文字符。"
+      : "";
     const apiResponse = await fetch("https://api.deepseek.com/chat/completions", {
       method: "POST",
       headers: {
@@ -540,10 +576,10 @@ async function handleStoryRequest(request, response) {
           },
           {
             role: "user",
-            content: prompt
+            content: prompt + compactInstruction
           }
         ],
-        max_tokens: 500,
+        max_tokens: shouldAdvanceStage ? 720 : 620,
         temperature: 0.75,
         response_format: {
           type: "json_object"
@@ -554,24 +590,18 @@ async function handleStoryRequest(request, response) {
     const data = await apiResponse.json();
 
     if (!apiResponse.ok) {
-      sendJson(response, apiResponse.status, {
-        error: data.error && data.error.message ? data.error.message : "AI 生成失败"
-      });
-      return;
+      throw new Error(data.error && data.error.message ? data.error.message : "AI 生成失败");
     }
-
-    const content = extractDeepSeekContent(data);
-    const result = parseStoryResult(content);
 
     if (data.choices && data.choices[0] && data.choices[0].finish_reason === "length") {
-      sendJson(response, 500, { error: "AI 输出被截断了，请重试一次。" });
-      return;
+      lastErrorMessage = "AI 输出被截断了";
+      continue;
     }
 
-    sendJson(response, 200, result);
-  } catch (error) {
-    sendJson(response, 500, { error: error.message || "服务器出错了" });
+    return data;
   }
+
+  throw new Error(lastErrorMessage + "，请再点一次选择。");
 }
 
 function serveStaticFile(request, response) {
