@@ -5,7 +5,17 @@ const choiceButtons = document.querySelectorAll("[data-choice]");
 const statusText = document.querySelector("#statusText");
 const reflectionPanel = document.querySelector("#reflectionPanel");
 const serverOrigin = "http://localhost:8000";
-const saveVersion = 3;
+const saveVersion = 4;
+const defaultLifeState = {
+  livelihood: "尚未稳定",
+  residence: "仍在原点附近",
+  relationships: "关系尚未展开",
+  family: "家庭期待仍在身后",
+  health: "普通",
+  money: "有限",
+  direction: "刚站到人生起点",
+  unresolved: ["高考之后的去向"]
+};
 
 const fallbackChoices = ["整理眼前的风险", "联系一个关键人物", "做一个小规模尝试"];
 const params = new URLSearchParams(window.location.search);
@@ -99,6 +109,7 @@ function createInitialState() {
     turn: 0,
     seeds: [],
     tendencies: [],
+    lifeState: { ...defaultLifeState },
     lifeLog: [],
     saveVersion: saveVersion
   };
@@ -132,16 +143,42 @@ function updateGameState(gameState, choice, data) {
     turn: gameState.turn + 1,
     seeds: mergeUnique(gameState.seeds, data.seeds || [], 12),
     tendencies: mergeUnique(gameState.tendencies, data.tendencies || [], 8),
+    lifeState: mergeLifeState(gameState.lifeState, data.statePatch),
     lastReflection: data.reflection || "",
     saveVersion: saveVersion,
     lifeLog: gameState.lifeLog.concat({
       stage: gameState.stage,
+      timeJump: data.timeJump || "一段时间后",
       choice: choice,
       result: data.story || "",
       choiceType: data.choiceType || "unknown",
-      lifeDomain: data.lifeDomain || "日常"
+      lifeDomain: data.lifeDomain || "日常",
+      statePatch: data.statePatch || {}
     }).slice(-24)
   };
+
+  return nextState;
+}
+
+function mergeLifeState(currentState, statePatch) {
+  const nextState = {
+    ...defaultLifeState,
+    ...(currentState || {})
+  };
+
+  if (!statePatch || typeof statePatch !== "object") {
+    return nextState;
+  }
+
+  Object.keys(defaultLifeState).forEach(function (key) {
+    const value = statePatch[key];
+
+    if (Array.isArray(value)) {
+      nextState[key] = mergeUnique(Array.isArray(nextState[key]) ? nextState[key] : [], value, 8);
+    } else if (typeof value === "string" && value.trim()) {
+      nextState[key] = value.trim();
+    }
+  });
 
   return nextState;
 }
