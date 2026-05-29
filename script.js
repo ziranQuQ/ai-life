@@ -5,7 +5,7 @@ const choiceButtons = document.querySelectorAll("[data-choice]");
 const statusText = document.querySelector("#statusText");
 const reflectionPanel = document.querySelector("#reflectionPanel");
 const serverOrigin = "http://localhost:8000";
-const saveVersion = 5;
+const saveVersion = 6;
 const defaultLifeState = {
   livelihood: "尚未稳定",
   residence: "仍在原点附近",
@@ -93,6 +93,7 @@ function createInitialState() {
     seeds: [],
     tendencies: [],
     lifeState: { ...defaultLifeState },
+    activeArcs: [],
     lifeLog: [],
     saveVersion: saveVersion
   };
@@ -163,6 +164,7 @@ function updateGameState(gameState, choice, data) {
     seeds: mergeUnique(gameState.seeds, data.seeds || [], 12),
     tendencies: mergeUnique(gameState.tendencies, data.tendencies || [], 8),
     lifeState: mergeLifeState(gameState.lifeState, data.statePatch),
+    activeArcs: updateActiveArcs(gameState.activeArcs || [], data),
     lastReflection: data.reflection || "",
     saveVersion: saveVersion,
     lifeLog: gameState.lifeLog.concat({
@@ -172,11 +174,45 @@ function updateGameState(gameState, choice, data) {
       result: data.story || "",
       choiceType: data.choiceType || "unknown",
       lifeDomain: data.lifeDomain || "日常",
+      arcType: data.arcType || "main",
+      arcName: data.arcName || "",
+      arcStatus: data.arcStatus || "none",
+      arcImpact: data.arcImpact || "none",
       statePatch: data.statePatch || {}
     }).slice(-24)
   };
 
   return nextState;
+}
+
+function updateActiveArcs(currentArcs, data) {
+  const arcName = typeof data.arcName === "string" ? data.arcName.trim() : "";
+  const arcType = data.arcType || "main";
+  const arcStatus = data.arcStatus || "none";
+  const arcImpact = data.arcImpact || "none";
+  const existingArcs = Array.isArray(currentArcs) ? currentArcs.slice() : [];
+
+  if (!arcName || arcStatus === "none" || arcType === "main") {
+    return existingArcs.slice(-8);
+  }
+
+  const withoutCurrent = existingArcs.filter(function (arc) {
+    return arc.name !== arcName;
+  });
+
+  if (arcStatus === "closed") {
+    return withoutCurrent.slice(-8);
+  }
+
+  withoutCurrent.push({
+    name: arcName,
+    type: arcType,
+    status: arcStatus,
+    impact: arcImpact,
+    note: data.story || ""
+  });
+
+  return withoutCurrent.slice(-8);
 }
 
 function mergeLifeState(currentState, statePatch) {

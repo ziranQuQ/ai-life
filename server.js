@@ -13,6 +13,31 @@ const DEFAULT_STORY = "高考结束了，你站在人生的第一个重要路口
 const TURNS_PER_STAGE = 9;
 const CHOICE_COUNT = 4;
 const LIFE_DOMAINS = ["生计", "家庭", "关系", "健康", "居住", "自我", "时代", "偶然", "日常"];
+const ARC_TYPES = ["main", "side", "random"];
+const ARC_STATUSES = ["none", "open", "closed", "promoted"];
+const ARC_IMPACTS = ["none", "seed", "stateChange", "mainShift"];
+const SIDE_ARC_IDEAS = [
+  "兴趣爱好",
+  "恋爱或亲密关系",
+  "朋友与合伙",
+  "一次搬迁或远行",
+  "健康提醒",
+  "照护家人",
+  "重新学习一门技能",
+  "社区或熟人网络",
+  "旧人重逢",
+  "一段短暂的孤独生活"
+];
+const RANDOM_EVENT_IDEAS = [
+  "意外得到一笔钱",
+  "遇到可行的商业机会",
+  "被裁员或行业突然变化",
+  "亲人突发健康问题",
+  "房租或城市政策改变",
+  "朋友提出合伙邀请",
+  "一次偶然的作品被看见",
+  "一场事故改变生活节奏"
+];
 const TIME_JUMP_EXAMPLES = [
   "几个星期后",
   "一个雨季过去",
@@ -486,6 +511,18 @@ function normalizeStatePatch(statePatch) {
   }, {});
 }
 
+function normalizeArcType(arcType) {
+  return ARC_TYPES.includes(arcType) ? arcType : "main";
+}
+
+function normalizeArcStatus(arcStatus) {
+  return ARC_STATUSES.includes(arcStatus) ? arcStatus : "none";
+}
+
+function normalizeArcImpact(arcImpact) {
+  return ARC_IMPACTS.includes(arcImpact) ? arcImpact : "none";
+}
+
 function normalizeStoryResult(result) {
   const stageIndex = Number.isInteger(result.stageIndex) ? result.stageIndex : undefined;
 
@@ -495,6 +532,10 @@ function normalizeStoryResult(result) {
     timeJump: normalizeTimeJump(result.timeJump),
     choiceType: normalizeChoiceType(result.choiceType),
     lifeDomain: normalizeLifeDomain(result.lifeDomain),
+    arcType: normalizeArcType(result.arcType),
+    arcName: typeof result.arcName === "string" ? result.arcName.trim().slice(0, 24) : "",
+    arcStatus: normalizeArcStatus(result.arcStatus),
+    arcImpact: normalizeArcImpact(result.arcImpact),
     statePatch: normalizeStatePatch(result.statePatch),
     seeds: normalizeStringList(result.seeds, 4, 36),
     tendencies: normalizeStringList(result.tendencies, 4, 18),
@@ -522,6 +563,10 @@ function sanitizeStoryResult(result) {
     timeJump: "一段时间后",
     choiceType: "flavor",
     lifeDomain: "日常",
+    arcType: "main",
+    arcName: "",
+    arcStatus: "none",
+    arcImpact: "none",
     statePatch: {},
     source: "fallback"
   };
@@ -602,6 +647,7 @@ function normalizeGameState(gameState, playerName) {
       seeds: [],
       tendencies: [],
       lifeState: normalizeLifeState(),
+      activeArcs: [],
       lifeLog: []
     };
   }
@@ -618,8 +664,29 @@ function normalizeGameState(gameState, playerName) {
     seeds: normalizeStringList(gameState.seeds, 12, 36),
     tendencies: normalizeStringList(gameState.tendencies, 8, 18),
     lifeState: normalizeLifeState(gameState.lifeState),
+    activeArcs: normalizeActiveArcs(gameState.activeArcs),
     lifeLog: Array.isArray(gameState.lifeLog) ? gameState.lifeLog.slice(-8) : []
   };
+}
+
+function normalizeActiveArcs(activeArcs) {
+  if (!Array.isArray(activeArcs)) {
+    return [];
+  }
+
+  return activeArcs.filter(function (arc) {
+    return arc && typeof arc === "object";
+  }).map(function (arc) {
+    return {
+      name: typeof arc.name === "string" ? arc.name.trim().slice(0, 24) : "",
+      type: normalizeArcType(arc.type),
+      status: normalizeArcStatus(arc.status),
+      impact: normalizeArcImpact(arc.impact),
+      note: typeof arc.note === "string" ? arc.note.trim().slice(0, 60) : ""
+    };
+  }).filter(function (arc) {
+    return arc.name && arc.status !== "closed";
+  }).slice(-8);
 }
 
 function formatRecentLifeLog(lifeLog) {
@@ -629,8 +696,62 @@ function formatRecentLifeLog(lifeLog) {
 
   return lifeLog.slice(-5).map(function (item) {
     const domain = item.lifeDomain ? `（${item.lifeDomain}）` : "";
-    return `${item.stage || "某阶段"}${domain}选择了「${item.choice || "未知选择"}」`;
+    const arc = item.arcName ? `，支线/事件：${item.arcName}` : "";
+    return `${item.stage || "某阶段"}${domain}选择了「${item.choice || "未知选择"}」${arc}`;
   }).join("；");
+}
+
+function formatActiveArcs(activeArcs) {
+  if (!Array.isArray(activeArcs) || activeArcs.length === 0) {
+    return "暂无";
+  }
+
+  return activeArcs.slice(-6).map(function (arc) {
+    return `${arc.name || "未命名"}（${arc.type || "side"}，${arc.status || "open"}，${arc.impact || "seed"}）`;
+  }).join("；");
+}
+
+function buildArcGuidance(gameState) {
+  const recentArcTypes = Array.isArray(gameState.lifeLog)
+    ? gameState.lifeLog.slice(-6).map(function (item) {
+      return item.arcType;
+    }).filter(Boolean)
+    : [];
+  const mainCount = recentArcTypes.filter(function (type) {
+    return type === "main";
+  }).length;
+  const sideCount = recentArcTypes.filter(function (type) {
+    return type === "side";
+  }).length;
+  const randomCount = recentArcTypes.filter(function (type) {
+    return type === "random";
+  }).length;
+
+  if (mainCount >= 5) {
+    return [
+      "最近主线过多，本次优先生成一条支线，但支线必须仍然属于玩家人生：兴趣、恋爱、朋友、健康、搬迁、学习或远行。",
+      `可选支线灵感：${SIDE_ARC_IDEAS.join("、")}。`,
+      "支线可以轻轻经过，也可以留下伏笔；只有当玩家选择明显投入时，才允许升级为谋生或人生主线。"
+    ].join("\n");
+  }
+
+  if (sideCount >= 3) {
+    return "最近支线较多，本次应回到人生主线，展示谋生、家庭、健康、金钱、居住或长期方向的变化。";
+  }
+
+  if (randomCount === 0 && gameState.turn > 0 && gameState.turn % 7 === 0) {
+    return [
+      "本次可以考虑一个稀有随机事件，但不要像抽卡爽文。",
+      `可选随机事件灵感：${RANDOM_EVENT_IDEAS.join("、")}。`,
+      "随机事件必须带来诱惑和代价，让玩家决定是否投入，而不是直接替玩家改变人生。"
+    ].join("\n");
+  }
+
+  return [
+    "本次默认推进主线，但可以自然打开一个支线入口。",
+    `支线灵感：${SIDE_ARC_IDEAS.join("、")}。`,
+    "随机事件必须稀有，且不能直接奖励或惩罚玩家。"
+  ].join("\n");
 }
 
 function getRecentDomainGuidance(lifeLog, currentStage) {
@@ -766,6 +887,7 @@ function buildStoryPrompt(context) {
   const domainGuidance = getRecentDomainGuidance(gameState.lifeLog, currentStage);
   const timeJumpGuidance = buildTimeJumpGuidance(gameState.lifeLog);
   const narrativeTrapGuidance = detectNarrativeTrap(gameState);
+  const arcGuidance = buildArcGuidance(gameState);
 
   return [
       "你正在为一个《AI人生模拟器》网页游戏生成下一幕。",
@@ -787,10 +909,12 @@ function buildStoryPrompt(context) {
       formatLifeState(gameState.lifeState),
       `人生种子：${gameState.seeds.length ? gameState.seeds.join("；") : "暂无"}`,
       `人生倾向：${gameState.tendencies.length ? gameState.tendencies.join("；") : "暂无"}`,
+      `正在发展的支线：${formatActiveArcs(gameState.activeArcs)}`,
       `最近选择：${formatRecentLifeLog(gameState.lifeLog)}`,
       `生活领域轮换：${domainGuidance}`,
       `时间跨度建议：${timeJumpGuidance}`,
       `单线陷阱提醒：${narrativeTrapGuidance}`,
+      `支线与随机事件建议：${arcGuidance}`,
       "",
       "【生成目标】",
       "1. 这是人生模拟器，不是单个事件模拟器。每次点击后必须推进一段人生时间，而不是继续描写上一幕的下一秒。",
@@ -804,28 +928,35 @@ function buildStoryPrompt(context) {
       "9. 至少让剧情同时涉及两个生活面向，例如谋生+亲密关系、家庭+健康、金钱+居住、职业+时代变化、自我追求+朋友疏远。",
       "10. 不是每个选择都要站在人生岔路口。允许出现一个生活化、看似无关紧要的选项，它可能没有长期后果。",
       "11. 玩家不知道哪个选择会成为伏笔。不要显式标注选项重要程度。",
-      "12. 关键事件必须稀有。本次除非人生档案自然指向关键回响，否则不要制造重大转折。",
-      "13. NPC 可以出现，但必须服务于玩家个人主线，不要抢走主角位置。不要只有父亲或单个熟人反复出现。",
-      "14. 不要评价玩家选择好坏，不要给分，不要使用成功、失败、正确、错误等评判词。",
-      "15. 剧情 110 到 190 个中文字符，具体、有画面、有因果，但核心是人生节点，不是日记流水账。",
-      "16. 四个选项必须符合当前人生节点：至少一个维持当前路线，至少一个转向新生活领域，至少一个关系/家庭/健康方向，至少一个看似普通或保守的选择。",
-      "17. 禁止使用泛泛选项：继续努力、换个方向、先观察情况、主动尝试新机会、先积累更多信息、找信任的人商量。",
-      "18. 面向普通大众玩家，文字要通俗、具体、可共情。严禁写高等数学、学术论文、专业公式、复杂理论、符号推导、曲面积分、三重积分等小众专业内容。",
-      "19. 如果当前阶段已经不是人生初章，不要把学校、图书馆、刷题、考试、习题集作为主线。可以短暂回忆，但必须立刻回到当前阶段的现实处境。",
-      `20. 本次必须从这些生活领域里选择一个作为隐藏分类：${LIFE_DOMAINS.join("、")}。如果最近几幕都困在同一行业、同一地点、同一 NPC 或同一任务，请自然转向其他生活领域。`,
+      "12. 可以出现支线：兴趣爱好、恋爱、朋友、健康、搬迁、远行、学习、社区、旧人重逢。支线通常持续 1 到 3 个节点，然后回到主线。",
+      "13. 支线可以升级为主线：例如兴趣变成谋生、恋爱变成家庭、朋友变成合伙人、一次远行改变居住地。但只有玩家选择明显投入时才允许升级。",
+      "14. 可以出现随机事件，但必须稀有。彩票中奖、商业机会、裁员、疾病、政策变化等都要带有代价和不确定性，不要直接给玩家开挂。",
+      "15. NPC 可以出现，但必须服务于玩家个人主线，不要抢走主角位置。不要只有父亲或单个熟人反复出现。",
+      "16. 不要评价玩家选择好坏，不要给分，不要使用成功、失败、正确、错误等评判词。",
+      "17. 剧情 110 到 190 个中文字符，具体、有画面、有因果，但核心是人生节点，不是日记流水账。",
+      "18. 四个选项必须符合当前人生节点：至少一个维持当前路线，至少一个转向新生活领域，至少一个关系/家庭/健康方向，至少一个看似普通或保守的选择。",
+      "19. 如果本次是支线，四个选项里必须至少一个能回到主线；如果本次是随机事件，四个选项里必须至少一个拒绝冒险、一个谨慎尝试、一个全力投入。",
+      "20. 禁止使用泛泛选项：继续努力、换个方向、先观察情况、主动尝试新机会、先积累更多信息、找信任的人商量。",
+      "21. 面向普通大众玩家，文字要通俗、具体、可共情。严禁写高等数学、学术论文、专业公式、复杂理论、符号推导、曲面积分、三重积分等小众专业内容。",
+      "22. 如果当前阶段已经不是人生初章，不要把学校、图书馆、刷题、考试、习题集作为主线。可以短暂回忆，但必须立刻回到当前阶段的现实处境。",
+      `23. 本次必须从这些生活领域里选择一个作为隐藏分类：${LIFE_DOMAINS.join("、")}。如果最近几幕都困在同一行业、同一地点、同一 NPC 或同一任务，请自然转向其他生活领域。`,
       shouldAdvanceStage
-        ? `21. 本次需要生成一个阶段回响 reflection，并自然进入下一阶段：${nextStage.name}。阶段回响中性总结这一阶段发生了什么、得到与失去、留下的碎片，不评分。`
-        : "21. 本次不需要阶段回响，reflection 返回空字符串。",
+        ? `24. 本次需要生成一个阶段回响 reflection，并自然进入下一阶段：${nextStage.name}。阶段回响中性总结这一阶段发生了什么、得到与失去、留下的碎片，不评分。`
+        : "24. 本次不需要阶段回响，reflection 返回空字符串。",
       "",
       "【输出格式】",
       "只返回合法 JSON，不要 Markdown，不要代码块，不要额外解释。",
-      "JSON 必须包含 story、choices、timeJump、choiceType、lifeDomain、statePatch、seeds、tendencies、reflection、stage、stageIndex：",
-      "{\"story\":\"剧情文字\",\"choices\":[\"接下来一段人生的选择A\",\"接下来一段人生的选择B\",\"接下来一段人生的选择C\",\"接下来一段人生的选择D\"],\"timeJump\":\"又一个夏天\",\"choiceType\":\"minor\",\"lifeDomain\":\"生计\",\"statePatch\":{\"livelihood\":\"开始做稳定工作\",\"money\":\"略有积蓄\",\"direction\":\"暂时选择安稳\"},\"seeds\":[\"可能回响的生活种子\"],\"tendencies\":[\"自由\"],\"reflection\":\"\",\"stage\":\"高考之后\",\"stageIndex\":0}",
+      "JSON 必须包含 story、choices、timeJump、choiceType、lifeDomain、arcType、arcName、arcStatus、arcImpact、statePatch、seeds、tendencies、reflection、stage、stageIndex：",
+      "{\"story\":\"剧情文字\",\"choices\":[\"接下来一段人生的选择A\",\"接下来一段人生的选择B\",\"接下来一段人生的选择C\",\"接下来一段人生的选择D\"],\"timeJump\":\"又一个夏天\",\"choiceType\":\"minor\",\"lifeDomain\":\"生计\",\"arcType\":\"side\",\"arcName\":\"夜校摄影\",\"arcStatus\":\"open\",\"arcImpact\":\"seed\",\"statePatch\":{\"livelihood\":\"开始做稳定工作\",\"money\":\"略有积蓄\",\"direction\":\"暂时选择安稳\"},\"seeds\":[\"可能回响的生活种子\"],\"tendencies\":[\"自由\"],\"reflection\":\"\",\"stage\":\"高考之后\",\"stageIndex\":0}",
       "",
       "【字段说明】",
       "timeJump 是从玩家刚刚选择到这一幕之间经过的时间，必须体现人生推进。",
       "choiceType 只能是 major、minor、flavor 之一，代表刚才选择造成的影响级别，但不要在选项文字中体现。",
       `lifeDomain 只能是以下之一：${LIFE_DOMAINS.join("、")}。这是隐藏字段，不要写进剧情或选项。`,
+      "arcType 只能是 main、side、random。main 是人生主线，side 是支线，random 是随机事件。",
+      "arcName 是支线或随机事件名称，例如夜校摄影、旧友重逢、彩票奖金、合伙邀请；主线可为空字符串。",
+      "arcStatus 只能是 none、open、closed、promoted。promoted 表示支线升级成主线。",
+      "arcImpact 只能是 none、seed、stateChange、mainShift。mainShift 必须非常少见。",
       "statePatch 只写这次选择后发生变化的人生状态，可包含 livelihood、residence、relationships、family、health、money、direction、unresolved。没有变化的字段不要写。",
       "seeds 记录可能在未来回响的微小选择或生活碎片，可以为空数组。",
       "tendencies 记录玩家正在靠近的价值倾向，例如自由、安稳、家庭、理想、财富、权力、亲密、孤独，可以为空数组。",
