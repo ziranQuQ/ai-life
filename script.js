@@ -5,7 +5,7 @@ const choiceButtons = document.querySelectorAll("[data-choice]");
 const statusText = document.querySelector("#statusText");
 const reflectionPanel = document.querySelector("#reflectionPanel");
 const serverOrigin = "http://localhost:8000";
-const saveVersion = 4;
+const saveVersion = 5;
 const defaultLifeState = {
   livelihood: "尚未稳定",
   residence: "仍在原点附近",
@@ -17,7 +17,7 @@ const defaultLifeState = {
   unresolved: ["高考之后的去向"]
 };
 
-const fallbackChoices = ["整理眼前的风险", "联系一个关键人物", "做一个小规模尝试"];
+const fallbackChoices = ["把眼前生活先稳定下来", "主动离开原来的圈子", "联系一个新的关键人物", "给自己留一条退路"];
 const params = new URLSearchParams(window.location.search);
 const playerName = params.get("name") || "你";
 const stateKey = "aiLifeSimulatorState:" + playerName;
@@ -61,24 +61,7 @@ if (choiceButtons.length > 0 && storyText) {
           return;
         }
 
-        const response = await fetch("/api/story", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            name: playerName,
-            choice: choice,
-            previousStory: storyText.textContent,
-            gameState: gameState
-          })
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.error || "AI 生成失败");
-        }
+        const data = await requestNextStory(gameState, choice, storyText.textContent);
 
         storyText.textContent = data.story || "你做出了选择，人生进入了新的阶段。";
         updateChoices(data.choices || fallbackChoices);
@@ -133,6 +116,42 @@ function loadGameState() {
 
 function saveGameState(gameState) {
   localStorage.setItem(stateKey, JSON.stringify(gameState));
+}
+
+async function requestNextStory(gameState, choice, previousStory) {
+  let lastError;
+
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      if (attempt > 1) {
+        statusText.textContent = "命运还在整理线索，正在再试一次...";
+      }
+
+      const response = await fetch("/api/story", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          name: playerName,
+          choice: choice,
+          previousStory: previousStory,
+          gameState: gameState
+        })
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "AI 生成失败");
+      }
+
+      return data;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError;
 }
 
 function updateGameState(gameState, choice, data) {
@@ -221,7 +240,7 @@ function setLoading(isLoading) {
 function updateChoices(choices) {
   choiceButtons.forEach(function (button, index) {
     const choiceText = choices[index] || fallbackChoices[index];
-    const prefix = ["A", "B", "C"][index];
+    const prefix = ["A", "B", "C", "D"][index];
 
     button.textContent = prefix + " " + choiceText;
     button.dataset.choice = choiceText;

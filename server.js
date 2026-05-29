@@ -11,7 +11,22 @@ const DEEPSEEK_API_KEY = cleanEnvValue(process.env.DEEPSEEK_API_KEY || process.e
 const DEEPSEEK_MODEL = normalizeDeepSeekModel(process.env.DEEPSEEK_MODEL || process.env.DEEPSEEKMODEL);
 const DEFAULT_STORY = "高考结束了，你站在人生的第一个重要路口。未来会怎样，还没有答案。";
 const TURNS_PER_STAGE = 9;
+const CHOICE_COUNT = 4;
 const LIFE_DOMAINS = ["生计", "家庭", "关系", "健康", "居住", "自我", "时代", "偶然", "日常"];
+const TIME_JUMP_EXAMPLES = [
+  "几个星期后",
+  "一个雨季过去",
+  "半年后",
+  "年关前",
+  "又一个夏天",
+  "一年多后",
+  "两三年后",
+  "换过几次住处后",
+  "父母明显老了一些时",
+  "身体第一次提醒你时",
+  "城市换了一轮门面后",
+  "许多旧人渐渐少联系后"
+];
 const LIFE_STATE_FIELDS = ["livelihood", "residence", "relationships", "family", "health", "money", "direction", "unresolved"];
 const DEFAULT_LIFE_STATE = {
   livelihood: "尚未稳定",
@@ -255,10 +270,10 @@ function parseLooseStoryResult(content) {
     choices.push(normalizeChoiceText(match[1] || match[2]));
   }
 
-  if (story && choices.length >= 3 && !hasGenericChoices(choices.slice(0, 3))) {
+  if (story && choices.length >= CHOICE_COUNT && !hasGenericChoices(choices.slice(0, CHOICE_COUNT))) {
     return normalizeStoryResult({
       story,
-      choices: choices.slice(0, 3),
+      choices: choices.slice(0, CHOICE_COUNT),
       source: "ai"
     });
   }
@@ -268,38 +283,38 @@ function parseLooseStoryResult(content) {
 
 function buildFallbackChoices(story) {
   if (story.includes("游戏") || story.includes("英雄联盟") || story.includes("开黑") || story.includes("队友")) {
-    return ["控制游戏时间", "复盘今天的状态", "把注意力拉回现实"];
+    return ["把娱乐时间压到晚上", "约朋友线下见一面", "把注意力拉回现实", "暂时放空一天"];
   }
 
   if (story.includes("大学") || story.includes("课程") || story.includes("校园") || story.includes("同学")) {
-    return ["认真学习专业课", "参加校园活动", "寻找兼职机会"];
+    return ["继续读下去并争取奖学金", "参加社团认识新的人", "寻找兼职补贴生活", "考虑毕业后的城市"];
   }
 
   if (story.includes("工作") || story.includes("公司") || story.includes("同事") || story.includes("老板")) {
-    return ["提升工作技能", "主动争取项目", "下班学习副业"];
+    return ["把这份工作先做稳", "争取接触新的岗位", "下班发展另一个可能", "重新评估这座城市"];
   }
 
   if (story.includes("创业") || story.includes("客户") || story.includes("项目") || story.includes("产品")) {
-    return ["寻找第一批客户", "优化产品方案", "邀请伙伴加入"];
+    return ["继续扩大眼前的生意", "试着开辟新的收入来源", "找一个可信的人合作", "给生活留出一点空地"];
   }
 
   if (story.includes("家庭") || story.includes("父母") || story.includes("家人")) {
-    return ["和家人认真沟通", "独自做出决定", "先缓一缓再说"];
+    return ["和家人重新谈一次边界", "独自承担这个决定", "把更多精力转向自己的生活", "暂时维持表面的平静"];
   }
 
   if (story.includes("钱") || story.includes("收入") || story.includes("存款") || story.includes("经济")) {
-    return ["努力增加收入", "控制日常开销", "寻找新的机会"];
+    return ["提高收入优先级", "控制开销保住余地", "寻找新的机会", "接受一段更普通的生活"];
   }
 
-  return ["整理眼前的风险", "联系一个关键人物", "做一个小规模尝试"];
+  return ["把眼前生活先稳定下来", "主动离开原来的圈子", "联系一个新的关键人物", "给自己留一条退路"];
 }
 
 function normalizeChoiceText(choice) {
   return choice
-    .replace(/^(?:选项)?[ABC]\s*[：:、.]?\s*/i, "")
-    .replace(/^[123]\s*[：:、.]?\s*/, "")
+    .replace(/^(?:选项)?[ABCD]\s*[：:、.]?\s*/i, "")
+    .replace(/^[1234]\s*[：:、.]?\s*/, "")
     .trim()
-    .slice(0, 22);
+    .slice(0, 30);
 }
 
 function hasGenericChoices(choices) {
@@ -321,8 +336,8 @@ function parseLineFormat(content) {
 
   lines.forEach(function (line) {
     const storyMatch = line.match(/^剧情[：:]\s*(.+)$/);
-    const choiceMatch = line.match(/^(?:选项)?([ABC])\s*[：:、.]\s*(.+)$/i);
-    const numberedMatch = line.match(/^[123]\s*[：:、.]\s*(.+)$/);
+    const choiceMatch = line.match(/^(?:选项)?([ABCD])\s*[：:、.]\s*(.+)$/i);
+    const numberedMatch = line.match(/^[1234]\s*[：:、.]\s*(.+)$/);
 
     if (storyMatch) {
       story = storyMatch[1].trim();
@@ -335,7 +350,7 @@ function parseLineFormat(content) {
 
   if (!story) {
     const firstChoiceIndex = lines.findIndex(function (line) {
-      return /^(?:选项)?[ABC]\s*[：:、.]|^[123]\s*[：:、.]/i.test(line);
+      return /^(?:选项)?[ABCD]\s*[：:、.]|^[1234]\s*[：:、.]/i.test(line);
     });
 
     if (firstChoiceIndex > 0) {
@@ -343,10 +358,10 @@ function parseLineFormat(content) {
     }
   }
 
-  if (story && choices.length >= 3) {
+  if (story && choices.length >= CHOICE_COUNT) {
     return {
       story,
-      choices: choices.slice(0, 3),
+      choices: choices.slice(0, CHOICE_COUNT),
       source: "ai"
     };
   }
@@ -411,9 +426,9 @@ function parseJsonStoryResult(jsonText, fallbackResult) {
       return normalizeChoiceText(choice);
     })
     .filter(Boolean)
-    .slice(0, 3);
+    .slice(0, CHOICE_COUNT);
 
-  if (!story || choices.length !== 3 || hasGenericChoices(choices)) {
+  if (!story || choices.length !== CHOICE_COUNT || hasGenericChoices(choices)) {
     return normalizeStoryResult({
       story: story || fallbackResult.story,
       choices: buildFallbackChoices(story || fallbackResult.story),
@@ -428,6 +443,21 @@ function normalizeTimeJump(timeJump) {
   const text = typeof timeJump === "string" ? timeJump.trim() : "";
 
   return text.slice(0, 20) || "一段时间后";
+}
+
+function buildTimeJumpGuidance(lifeLog) {
+  const recentTimeJumps = Array.isArray(lifeLog)
+    ? lifeLog.slice(-6).map(function (item) {
+      return item.timeJump;
+    }).filter(Boolean)
+    : [];
+  const recentSummary = recentTimeJumps.length ? recentTimeJumps.join("、") : "暂无";
+
+  return [
+    `最近用过的时间跨度：${recentSummary}`,
+    `本次请优先从这些表达中选择一个没有刚刚重复过的：${TIME_JUMP_EXAMPLES.join("、")}。`,
+    "不要连续使用“几个月后”。时间跨度应随人生阶段自然变长或变短。"
+  ].join("\n");
 }
 
 function normalizeStatePatch(statePatch) {
@@ -461,7 +491,7 @@ function normalizeStoryResult(result) {
 
   return {
     story: String(result.story || "").trim(),
-    choices: Array.isArray(result.choices) ? result.choices.slice(0, 3) : buildFallbackChoices(result.story || ""),
+    choices: Array.isArray(result.choices) ? result.choices.slice(0, CHOICE_COUNT) : buildFallbackChoices(result.story || ""),
     timeJump: normalizeTimeJump(result.timeJump),
     choiceType: normalizeChoiceType(result.choiceType),
     lifeDomain: normalizeLifeDomain(result.lifeDomain),
@@ -633,6 +663,58 @@ function getRecentDomainGuidance(lifeLog, currentStage) {
   return `本阶段可优先考虑这些生活领域：${preferredDomains}。也可以根据上一幕自然转向其他领域。`;
 }
 
+function detectNarrativeTrap(gameState) {
+  const text = [
+    gameState.lifeState && gameState.lifeState.livelihood,
+    gameState.lifeState && gameState.lifeState.relationships,
+    gameState.lifeState && gameState.lifeState.family,
+    gameState.lifeState && gameState.lifeState.direction,
+    Array.isArray(gameState.lifeState && gameState.lifeState.unresolved)
+      ? gameState.lifeState.unresolved.join("；")
+      : "",
+    Array.isArray(gameState.lifeLog)
+      ? gameState.lifeLog.slice(-6).map(function (item) {
+        return [item.choice, item.result].join(" ");
+      }).join(" ")
+      : ""
+  ].join(" ");
+  const traps = [
+    {
+      label: "店铺/小生意",
+      patterns: ["店", "铺", "摊", "货", "客人", "生意"]
+    },
+    {
+      label: "父亲/家庭单线",
+      patterns: ["父亲", "爸爸", "爸"]
+    },
+    {
+      label: "学校/刷题",
+      patterns: ["学校", "图书馆", "习题", "考试"]
+    },
+    {
+      label: "汽修/单一职业",
+      patterns: ["汽修", "修车", "工位", "汽配"]
+    }
+  ];
+  const matchedTraps = traps.filter(function (trap) {
+    return trap.patterns.some(function (pattern) {
+      return text.includes(pattern);
+    });
+  }).map(function (trap) {
+    return trap.label;
+  });
+
+  if (!matchedTraps.length) {
+    return "暂无明显单线陷阱。";
+  }
+
+  return [
+    `检测到剧情可能被这些内容锁住：${matchedTraps.join("、")}。`,
+    "本次必须把它们降为背景或人生履历的一部分，不要继续围绕它们展开主线。",
+    "请引入至少两个新的生活面向，例如新的城市/住处、伴侣或朋友、健康问题、行业变化、债务/资产、子女或照护、学习转行、远行、政策或时代变化。"
+  ].join("\n");
+}
+
 async function handleStoryRequest(request, response) {
   if (!DEEPSEEK_API_KEY) {
     sendJson(response, 500, {
@@ -682,6 +764,8 @@ function buildStoryPrompt(context) {
   const currentStageIndex = shouldAdvanceStage ? gameState.stageIndex + 1 : gameState.stageIndex;
   const outputStage = shouldAdvanceStage ? nextStage.name : currentStage.name;
   const domainGuidance = getRecentDomainGuidance(gameState.lifeLog, currentStage);
+  const timeJumpGuidance = buildTimeJumpGuidance(gameState.lifeLog);
+  const narrativeTrapGuidance = detectNarrativeTrap(gameState);
 
   return [
       "你正在为一个《AI人生模拟器》网页游戏生成下一幕。",
@@ -705,34 +789,38 @@ function buildStoryPrompt(context) {
       `人生倾向：${gameState.tendencies.length ? gameState.tendencies.join("；") : "暂无"}`,
       `最近选择：${formatRecentLifeLog(gameState.lifeLog)}`,
       `生活领域轮换：${domainGuidance}`,
+      `时间跨度建议：${timeJumpGuidance}`,
+      `单线陷阱提醒：${narrativeTrapGuidance}`,
       "",
       "【生成目标】",
       "1. 这是人生模拟器，不是单个事件模拟器。每次点击后必须推进一段人生时间，而不是继续描写上一幕的下一秒。",
       "2. 上一人生节点只能用来提取长期影响，不要续写搬东西、认门、做题、修车、聊天等具体动作。",
       "3. 剧情必须呈现“选择之后，过了一段时间，人生状态如何变化，并来到新的节点”。",
-      "4. timeJump 必须写清时间跨度，例如：几周后、几个月后、一年多后、几年后、又一个冬天。除非人生终章，不要写成当天继续。",
+      "4. timeJump 必须写清时间跨度，但不要总写“几个月后”。优先使用更有生活感的时间表达，例如雨季过去、年关前、又一个夏天、两三年后、父母明显老了一些时。",
       "5. 选项必须是下一段人生的处理方式或方向，不要写成弯腰搬沙发、上楼看屋、拿起工具这种微动作。",
       "6. 阶段名只代表时间气氛，不是剧情主题。不要把阶段名硬套成单一欲望、单一职业或单一关系。",
       "7. 剧情必须是现实人生模拟：学业、工作、家庭、金钱、关系、健康、城市生活、机会与压力。",
-      "8. 不是每个选择都要站在人生岔路口。允许出现一个生活化、看似无关紧要的选项，它可能没有长期后果。",
-      "9. 玩家不知道哪个选择会成为伏笔。不要显式标注选项重要程度。",
-      "10. 关键事件必须稀有。本次除非人生档案自然指向关键回响，否则不要制造重大转折。",
-      "11. NPC 可以出现，但必须服务于玩家个人主线，不要抢走主角位置。",
-      "12. 不要评价玩家选择好坏，不要给分，不要使用成功、失败、正确、错误等评判词。",
-      "13. 剧情 90 到 160 个中文字符，具体、有画面、有因果，但核心是人生节点，不是日记流水账。",
-      "14. 三个选项必须符合当前人生节点：可以包含重大选择、生活选择或日常选择，但都要指向一段生活的安排。",
-      "15. 禁止使用泛泛选项：继续努力、换个方向、先观察情况、主动尝试新机会、先积累更多信息、找信任的人商量。",
-      "16. 面向普通大众玩家，文字要通俗、具体、可共情。严禁写高等数学、学术论文、专业公式、复杂理论、符号推导、曲面积分、三重积分等小众专业内容。",
-      "17. 如果当前阶段已经不是人生初章，不要把学校、图书馆、刷题、考试、习题集作为主线。可以短暂回忆，但必须立刻回到当前阶段的现实处境。",
-      `18. 本次必须从这些生活领域里选择一个作为隐藏分类：${LIFE_DOMAINS.join("、")}。如果最近几幕都困在同一行业、同一地点、同一 NPC 或同一任务，请自然转向其他生活领域。`,
+      "8. 当前人生不能只剩一个店、一个职业、一个父亲或一个 NPC。每一幕都要让玩家感到人生结构在扩大或改变。",
+      "9. 至少让剧情同时涉及两个生活面向，例如谋生+亲密关系、家庭+健康、金钱+居住、职业+时代变化、自我追求+朋友疏远。",
+      "10. 不是每个选择都要站在人生岔路口。允许出现一个生活化、看似无关紧要的选项，它可能没有长期后果。",
+      "11. 玩家不知道哪个选择会成为伏笔。不要显式标注选项重要程度。",
+      "12. 关键事件必须稀有。本次除非人生档案自然指向关键回响，否则不要制造重大转折。",
+      "13. NPC 可以出现，但必须服务于玩家个人主线，不要抢走主角位置。不要只有父亲或单个熟人反复出现。",
+      "14. 不要评价玩家选择好坏，不要给分，不要使用成功、失败、正确、错误等评判词。",
+      "15. 剧情 110 到 190 个中文字符，具体、有画面、有因果，但核心是人生节点，不是日记流水账。",
+      "16. 四个选项必须符合当前人生节点：至少一个维持当前路线，至少一个转向新生活领域，至少一个关系/家庭/健康方向，至少一个看似普通或保守的选择。",
+      "17. 禁止使用泛泛选项：继续努力、换个方向、先观察情况、主动尝试新机会、先积累更多信息、找信任的人商量。",
+      "18. 面向普通大众玩家，文字要通俗、具体、可共情。严禁写高等数学、学术论文、专业公式、复杂理论、符号推导、曲面积分、三重积分等小众专业内容。",
+      "19. 如果当前阶段已经不是人生初章，不要把学校、图书馆、刷题、考试、习题集作为主线。可以短暂回忆，但必须立刻回到当前阶段的现实处境。",
+      `20. 本次必须从这些生活领域里选择一个作为隐藏分类：${LIFE_DOMAINS.join("、")}。如果最近几幕都困在同一行业、同一地点、同一 NPC 或同一任务，请自然转向其他生活领域。`,
       shouldAdvanceStage
-        ? `19. 本次需要生成一个阶段回响 reflection，并自然进入下一阶段：${nextStage.name}。阶段回响中性总结这一阶段发生了什么、得到与失去、留下的碎片，不评分。`
-        : "19. 本次不需要阶段回响，reflection 返回空字符串。",
+        ? `21. 本次需要生成一个阶段回响 reflection，并自然进入下一阶段：${nextStage.name}。阶段回响中性总结这一阶段发生了什么、得到与失去、留下的碎片，不评分。`
+        : "21. 本次不需要阶段回响，reflection 返回空字符串。",
       "",
       "【输出格式】",
       "只返回合法 JSON，不要 Markdown，不要代码块，不要额外解释。",
       "JSON 必须包含 story、choices、timeJump、choiceType、lifeDomain、statePatch、seeds、tendencies、reflection、stage、stageIndex：",
-      "{\"story\":\"剧情文字\",\"choices\":[\"接下来一段人生的选择A\",\"接下来一段人生的选择B\",\"接下来一段人生的选择C\"],\"timeJump\":\"几个月后\",\"choiceType\":\"minor\",\"lifeDomain\":\"生计\",\"statePatch\":{\"livelihood\":\"开始做稳定工作\",\"money\":\"略有积蓄\",\"direction\":\"暂时选择安稳\"},\"seeds\":[\"可能回响的生活种子\"],\"tendencies\":[\"自由\"],\"reflection\":\"\",\"stage\":\"高考之后\",\"stageIndex\":0}",
+      "{\"story\":\"剧情文字\",\"choices\":[\"接下来一段人生的选择A\",\"接下来一段人生的选择B\",\"接下来一段人生的选择C\",\"接下来一段人生的选择D\"],\"timeJump\":\"又一个夏天\",\"choiceType\":\"minor\",\"lifeDomain\":\"生计\",\"statePatch\":{\"livelihood\":\"开始做稳定工作\",\"money\":\"略有积蓄\",\"direction\":\"暂时选择安稳\"},\"seeds\":[\"可能回响的生活种子\"],\"tendencies\":[\"自由\"],\"reflection\":\"\",\"stage\":\"高考之后\",\"stageIndex\":0}",
       "",
       "【字段说明】",
       "timeJump 是从玩家刚刚选择到这一幕之间经过的时间，必须体现人生推进。",
@@ -769,6 +857,7 @@ async function requestStoryFromAI(prompt, shouldAdvanceStage) {
               "你的任务是根据人生档案和玩家选择，生成下一个人生节点。",
               "每次生成都必须推进一段人生时间，呈现长期状态变化；不要续写上一事件的下一秒。",
               "上一幕只用于提取长期影响，不用于连续描写同一个事件。",
+              "人生不能被单个店铺、单个职业、单个父亲或单个 NPC 锁死；要持续扩展生活场域和人际网络。",
               "永远保持现实主义，不跑题，不把无关娱乐内容变成主线。",
               "阶段名只是时间气氛，不是剧情模板；不要围绕同一个职业、学校、NPC、地点或任务连续打转。",
               "你需要在生计、家庭、关系、健康、居住、自我、时代、偶然、日常之间自然轮换生活领域。",
@@ -782,8 +871,8 @@ async function requestStoryFromAI(prompt, shouldAdvanceStage) {
             content: prompt + compactInstruction
           }
         ],
-        max_tokens: shouldAdvanceStage ? 720 : 620,
-        temperature: 0.75,
+        max_tokens: shouldAdvanceStage ? 900 : 780,
+        temperature: 0.82,
         response_format: {
           type: "json_object"
         }
